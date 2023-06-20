@@ -1,14 +1,18 @@
 package toyRetention
 
 import (
+	"hash/fnv"
 	"strings"
 )
 
 type block struct {
-	id     int
-	series map[string]interface{}
-	minT   int64
-	maxT   int64
+	id            int
+	series        map[string]interface{}
+	minT          int64
+	maxT          int64
+	appliedPolicy uint64
+	// Just for testing to see how many times the block was retained
+	retained int
 }
 
 type bucket struct {
@@ -34,7 +38,11 @@ func ApplyBucketRetention(policies userConfig, userBucket *bucket, currentTime i
 			return
 		} else {
 			// Apply all valid policies to the block and update the block
-			userBucket.blocks[i] = applyPolicy(buildPolicy(b.maxT, policies, currentTime), b)
+			toApply := buildPolicy(b.maxT, policies, currentTime)
+			policyHash := hashPolicy(toApply)
+			if policyHash != b.appliedPolicy {
+				userBucket.blocks[i] = applyPolicy(toApply, policyHash, b)
+			}
 		}
 	}
 }
@@ -61,7 +69,18 @@ func buildPolicy(blockMaxTime int64, config userConfig, currentTime int64) []per
 	return toApply
 }
 
-func applyPolicy(toApply []perSeriesRetentionPolicy, b block) block {
+func hashPolicy(policies []perSeriesRetentionPolicy) uint64 {
+	hash := fnv.New64()
+	for _, p := range policies {
+		_, err := hash.Write([]byte(p.policy))
+		if err != nil {
+			panic(err)
+		}
+	}
+	return hash.Sum64()
+}
+
+func applyPolicy(toApply []perSeriesRetentionPolicy, policyHash uint64, b block) block {
 	resultBlock := block{minT: b.minT, maxT: b.maxT}
 	resultSeries := make(map[string]interface{}, len(b.series))
 
@@ -74,5 +93,7 @@ func applyPolicy(toApply []perSeriesRetentionPolicy, b block) block {
 		}
 	}
 	resultBlock.series = resultSeries
+	resultBlock.appliedPolicy = policyHash
+	resultBlock.retained = b.retained + 1
 	return resultBlock
 }
