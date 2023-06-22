@@ -77,14 +77,32 @@ func TestRetentionTierMoveTime(t *testing.T) {
 	assert.Equal(t, bucket.blocks[0].retained, 2)
 }
 
-func TestRetentionRewrites(t *testing.T){
+func TestRetentionRewrites(t *testing.T) {
 	b := block{minT: 0, maxT: 1, series: map[string]interface{}{"series1": struct{}{}, "series2": struct{}{}, "series3": struct{}{}}}
 	bucket := bucket{blocks: []block{b}}
 	// Make the blocks into a map probably
 	p := userConfig{baseRetention: 2, policies: []perSeriesRetentionPolicy{{retentionPeriod: 3, policy: "series1"}, {retentionPeriod: 5, policy: "series2"}}}
-	for i := 1; i <= 5; i++{
+	for i := 1; i <= 5; i++ {
 		ApplyBucketRetention(p, &bucket, int64(i))
 	}
 	// Should only re-write when the block ages out of retention
 	assert.Equal(t, bucket.blocks[0].retained, 2)
+}
+
+func TestRetentionChangeFirstTierPolicy(t *testing.T) {
+	b := block{minT: 0, maxT: 1, series: map[string]interface{}{"series1": struct{}{}, "series2": struct{}{}, "series3": struct{}{}}}
+	bucket := bucket{blocks: []block{b}}
+	// Make the blocks into a map probably
+	p := userConfig{baseRetention: 2, policies: []perSeriesRetentionPolicy{{retentionPeriod: 4, policy: "series1"}, {retentionPeriod: 5, policy: "series2"}}}
+	ApplyBucketRetention(p, &bucket, 3)
+	assert.Equal(t, 2, len(bucket.blocks[0].series))
+
+	p2 := userConfig{baseRetention: 2, policies: []perSeriesRetentionPolicy{{retentionPeriod: 4, policy: "series2"}, {retentionPeriod: 5, policy: "series2"}}}
+	ApplyBucketRetention(p2, &bucket, 4)
+	assert.Equal(t, 1, len(bucket.blocks[0].series))
+	assert.Equal(t, 2, bucket.blocks[0].retained)
+
+	ApplyBucketRetention(p2, &bucket, 5)
+	assert.Equal(t, 1, len(bucket.blocks[0].series))
+	assert.Equal(t, 3, bucket.blocks[0].retained)
 }
