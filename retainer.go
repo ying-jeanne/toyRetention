@@ -1,18 +1,17 @@
 package toyRetention
 
 import (
-	"hash/fnv"
 	"strings"
 )
 
 type block struct {
-	id            int
-	series        map[string]interface{}
-	minT          int64
-	maxT          int64
-	appliedPolicy uint64
-	// Just for testing to see how many times the block was retained
+	id       int
+	series   map[string]interface{}
+	minT     int64
+	maxT     int64
 	retained int
+	metaData MetaData
+	deleted  bool
 }
 
 type bucket struct {
@@ -31,69 +30,66 @@ type userConfig struct {
 	policies      []perSeriesRetentionPolicy
 }
 
+type MetaData struct {
+	KeepPolicies []string
+	DropPolicies []string
+}
+
 func ApplyBucketRetention(policies userConfig, userBucket *bucket, currentTime int64) {
 	for i, b := range userBucket.blocks {
-		// If the block is outside the default retention tier it will need to be retained in some way
-		if !checkBlockRetention(b.maxT, currentTime-policies.baseRetention) {
-			return
+		// If the block is outside the min retention tier it will need to be checked and potentially rewrite
+		minRetention, maxRetention := getRetentionPeriodRange(policies.policies, policies.baseRetention)
+		if !isBlockRetentionPassed(b.maxT, currentTime, minRetention) {
+			continue
+		} else if isBlockRetentionPassed(b.maxT, currentTime, maxRetention) {
+			// If the block is outside the max retention tier it will need to be dropped
+			userBucket.blocks[i].deleted = true
 		} else {
-			// Apply all valid policies to the block and update the block
-			toApply := buildPolicy(b.maxT, policies, currentTime)
-			policyHash := hashPolicy(toApply)
-			if policyHash != b.appliedPolicy {
-				userBucket.blocks[i] = applyPolicy(toApply, policyHash, b)
+			// If the block is inside of the retention range, check the policy and rewrite when it is needed.
+			dropPolicies, keepPolicies := buildPolicy(b, policies, currentTime)
+			toBeDeleted, rewriteKeepPolicy, rewriteDropPolicy := needsRewrite(dropPolicies, keepPolicies, b, currentTime, policies.baseRetention)
+			if toBeDeleted {
+				userBucket.blocks[i].deleted = true
+			}
+			if rewriteKeepPolicy || rewriteDropPolicy {
+				userBucket.blocks[i] = applyPolicy(dropPolicies, keepPolicies, rewriteKeepPolicy, rewriteDropPolicy, b)
 			}
 		}
 	}
 }
 
-// Returns true if the maxTime is outside the retention threshold and would be expired
-func checkBlockRetention(maxT int64, threshold int64) bool {
-	// if max t is before threshold time return true
-	if maxT <= threshold {
-		return true
-	}
-	return false
-}
-
-func buildPolicy(blockMaxTime int64, config userConfig, currentTime int64) []perSeriesRetentionPolicy {
+func buildPolicy(b block, config userConfig, currentTime int64) ([]string, []string) {
 	// Figure out which policy matches
-	// If the time is explicitly after the threshold apply any config that is still valid
-	var toApply []perSeriesRetentionPolicy
-	for _, p := range config.policies {
-		// You want the inverse, so any policy that is still valid we would want to apply
-		if !checkBlockRetention(blockMaxTime, currentTime-p.retentionPeriod) {
-			toApply = append(toApply, p)
-		}
-	}
-	return toApply
+	// First check the base retention is already passed or not
+	var dropPolicies, keepPolicy []string
+	// Only when base retention is passed, we build keep policies
+
+	keepPolicy = buildKeepPolicy(config.policies, config.baseRetention, currentTime, b.maxT)
+	dropPolicies = buildDropPolicy(config.policies, config.baseRetention, currentTime, b.maxT)
+	return dropPolicies, keepPolicy
 }
 
-func hashPolicy(policies []perSeriesRetentionPolicy) uint64 {
-	hash := fnv.New64()
-	for _, p := range policies {
-		_, err := hash.Write([]byte(p.policy))
-		if err != nil {
-			panic(err)
-		}
-	}
-	return hash.Sum64()
-}
-
-func applyPolicy(toApply []perSeriesRetentionPolicy, policyHash uint64, b block) block {
-	resultBlock := block{minT: b.minT, maxT: b.maxT}
-	resultSeries := make(map[string]interface{}, len(b.series))
-
-	for _, p := range toApply {
-		for s := range b.series {
-			// Basic matchers check I'm too lazy for regex
-			if strings.Contains(p.policy, s) {
-				resultSeries[s] = struct{}{}
+func applyPolicy(dropPolicies []string, keepPolicies []string, rewriteKeepPolicy bool, rewriteDropPolicy bool, b block) block {
+	resultBlock := b
+	if rewriteDropPolicy {
+		for _, dp := range dropPolicies {
+			exist := false
+			for _, dph := range b.metaData.DropPolicies {
+				if dph == hashPolicy(dp) {
+					exist = true
+					continue
+				}
+			}
+			if !exist {
+				resultBlock.metaData.DropPolicies = append(resultBlock.metaData.DropPolicies, hashPolicy(dp))
 			}
 		}
 	}
-	resultBlock.series = resultSeries
-	resultBlock.appliedPolicy = policyHash
+
+	if rewriteKeepPolicy {
+		resultBlock.metaData.KeepPolicies = append(resultBlock.metaData.KeepPolicies, hashPolicy(strings.Join(keepPolicies, ";")))
+	}
+
 	resultBlock.retained = b.retained + 1
 	return resultBlock
 }
