@@ -4,30 +4,28 @@ import (
 	"strings"
 )
 
-type block struct {
-	id       int
-	series   map[string]interface{}
-	minT     int64
-	maxT     int64
-	retained int
-	metaData MetaData
-	deleted  bool
+type Block struct {
+	ID       int
+	Series   map[string]interface{}
+	MinT     int64
+	MaxT     int64
+	Retained int
+	MetaData MetaData
+	Deleted  bool
 }
 
-type bucket struct {
-	blocks []block
+type Bucket struct {
+	Blocks []Block
 }
 
-type perSeriesRetentionPolicy struct {
-	// retentionPeriod WILL ALWAYS be longer than the retention period before
-	retentionPeriod int64
-	// matching (contains) string
-	policy string
+type PerSeriesRetentionPolicy struct {
+	RetentionPeriod int64
+	Policy          string
 }
 
-type userConfig struct {
-	baseRetention int64
-	policies      []perSeriesRetentionPolicy
+type UserConfig struct {
+	BaseRetention int64
+	Policies      []PerSeriesRetentionPolicy
 }
 
 type MetaData struct {
@@ -35,61 +33,52 @@ type MetaData struct {
 	DropPolicies []string
 }
 
-func ApplyBucketRetention(policies userConfig, userBucket *bucket, currentTime int64) {
-	for i, b := range userBucket.blocks {
-		// If the block is outside the min retention tier it will need to be checked and potentially rewrite
-		minRetention, maxRetention := getRetentionPeriodRange(policies.policies, policies.baseRetention)
-		if !isBlockRetentionPassed(b.maxT, currentTime, minRetention) {
+func ApplyBucketRetention(policies UserConfig, userBucket *Bucket, currentTime int64) {
+	for i, b := range userBucket.Blocks {
+		minRetention, maxRetention := getRetentionPeriodRange(policies.Policies, policies.BaseRetention)
+		if !isBlockRetentionPassed(b.MaxT, currentTime, minRetention) {
 			continue
-		} else if isBlockRetentionPassed(b.maxT, currentTime, maxRetention) {
-			// If the block is outside the max retention tier it will need to be dropped
-			userBucket.blocks[i].deleted = true
+		} else if isBlockRetentionPassed(b.MaxT, currentTime, maxRetention) {
+			userBucket.Blocks[i].Deleted = true
 		} else {
-			// If the block is inside of the retention range, check the policy and rewrite when it is needed.
 			dropPolicies, keepPolicies := buildPolicy(b, policies, currentTime)
-			toBeDeleted, rewriteKeepPolicy, rewriteDropPolicy := needsRewrite(dropPolicies, keepPolicies, b, currentTime, policies.baseRetention)
+			toBeDeleted, rewriteKeepPolicy, rewriteDropPolicy := needsRewrite(dropPolicies, keepPolicies, b, currentTime, policies.BaseRetention)
 			if toBeDeleted {
-				userBucket.blocks[i].deleted = true
+				userBucket.Blocks[i].Deleted = true
 			}
 			if rewriteKeepPolicy || rewriteDropPolicy {
-				userBucket.blocks[i] = applyPolicy(dropPolicies, keepPolicies, rewriteKeepPolicy, rewriteDropPolicy, b)
+				userBucket.Blocks[i] = applyPolicy(dropPolicies, keepPolicies, rewriteKeepPolicy, rewriteDropPolicy, b)
 			}
 		}
 	}
 }
 
-func buildPolicy(b block, config userConfig, currentTime int64) ([]string, []string) {
-	// Figure out which policy matches
-	// First check the base retention is already passed or not
-	var dropPolicies, keepPolicy []string
-	// Only when base retention is passed, we build keep policies
-
-	keepPolicy = buildKeepPolicy(config.policies, config.baseRetention, currentTime, b.maxT)
-	dropPolicies = buildDropPolicy(config.policies, config.baseRetention, currentTime, b.maxT)
+func buildPolicy(b Block, config UserConfig, currentTime int64) ([]string, []string) {
+	keepPolicy := buildKeepPolicy(config.Policies, config.BaseRetention, currentTime, b.MaxT)
+	dropPolicies := buildDropPolicy(config.Policies, config.BaseRetention, currentTime, b.MaxT)
 	return dropPolicies, keepPolicy
 }
 
-func applyPolicy(dropPolicies []string, keepPolicies []string, rewriteKeepPolicy bool, rewriteDropPolicy bool, b block) block {
-	resultBlock := b
+func applyPolicy(dropPolicies []string, keepPolicies []string, rewriteKeepPolicy bool, rewriteDropPolicy bool, b Block) Block {
 	if rewriteDropPolicy {
 		for _, dp := range dropPolicies {
 			exist := false
-			for _, dph := range b.metaData.DropPolicies {
+			for _, dph := range b.MetaData.DropPolicies {
 				if dph == hashPolicy(dp) {
 					exist = true
-					continue
+					break
 				}
 			}
 			if !exist {
-				resultBlock.metaData.DropPolicies = append(resultBlock.metaData.DropPolicies, hashPolicy(dp))
+				b.MetaData.DropPolicies = append(b.MetaData.DropPolicies, hashPolicy(dp))
 			}
 		}
 	}
 
 	if rewriteKeepPolicy {
-		resultBlock.metaData.KeepPolicies = append(resultBlock.metaData.KeepPolicies, hashPolicy(strings.Join(keepPolicies, ";")))
+		b.MetaData.KeepPolicies = append(b.MetaData.KeepPolicies, hashPolicy(strings.Join(keepPolicies, ";")))
 	}
 
-	resultBlock.retained = b.retained + 1
-	return resultBlock
+	b.Retained++
+	return b
 }

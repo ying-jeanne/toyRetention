@@ -6,14 +6,14 @@ import (
 	"strings"
 )
 
-func getRetentionPeriodRange(policies []perSeriesRetentionPolicy, baseRetention int64) (int64, int64) {
+func getRetentionPeriodRange(policies []PerSeriesRetentionPolicy, baseRetention int64) (int64, int64) {
 	minRetention, maxRetention := baseRetention, baseRetention
 	for _, p := range policies {
-		if p.retentionPeriod < minRetention {
-			minRetention = p.retentionPeriod
+		if p.RetentionPeriod < minRetention {
+			minRetention = p.RetentionPeriod
 		}
-		if p.retentionPeriod > maxRetention {
-			maxRetention = p.retentionPeriod
+		if p.RetentionPeriod > maxRetention {
+			maxRetention = p.RetentionPeriod
 		}
 	}
 	return minRetention, maxRetention
@@ -29,15 +29,15 @@ func hashPolicy(policy string) string {
 	return base64.StdEncoding.EncodeToString([]byte(policy))
 }
 
-func buildKeepPolicy(policies []perSeriesRetentionPolicy, baseRetention int64, currentTime int64, maxT int64) []string {
+func buildKeepPolicy(policies []PerSeriesRetentionPolicy, baseRetention int64, currentTime int64, maxT int64) []string {
 	keepPolicies := []string{}
 	// When base retention is not reached, we don't need to build keep policies, only drop policy counts.
 	if !isBlockRetentionPassed(maxT, currentTime, baseRetention) {
 		return keepPolicies
 	}
 	for _, p := range policies {
-		if p.retentionPeriod > baseRetention && !isBlockRetentionPassed(maxT, currentTime, p.retentionPeriod) {
-			keepPolicies = append(keepPolicies, p.policy)
+		if p.RetentionPeriod > baseRetention && !isBlockRetentionPassed(maxT, currentTime, p.RetentionPeriod) {
+			keepPolicies = append(keepPolicies, p.Policy)
 		}
 	}
 	// keep it in order
@@ -47,11 +47,11 @@ func buildKeepPolicy(policies []perSeriesRetentionPolicy, baseRetention int64, c
 	return keepPolicies
 }
 
-func buildDropPolicy(policies []perSeriesRetentionPolicy, baseRetention int64, currentTime int64, maxT int64) []string {
+func buildDropPolicy(policies []PerSeriesRetentionPolicy, baseRetention int64, currentTime int64, maxT int64) []string {
 	dropPolicies := []string{}
 	for _, p := range policies {
-		if p.retentionPeriod <= baseRetention && isBlockRetentionPassed(maxT, currentTime, p.retentionPeriod) {
-			dropPolicies = append(dropPolicies, p.policy)
+		if p.RetentionPeriod <= baseRetention && isBlockRetentionPassed(maxT, currentTime, p.RetentionPeriod) {
+			dropPolicies = append(dropPolicies, p.Policy)
 		}
 	}
 	return dropPolicies
@@ -67,15 +67,15 @@ func isKeepPoliciesSame(keepPolicyHistory []string, keepPolicy []string) bool {
 	return true
 }
 
-func needsRewrite(dropPolicies []string, keepPolicies []string, b block, currentTime int64, baseRetention int64) (bool, bool, bool) {
+func needsRewrite(dropPolicies []string, keepPolicies []string, b Block, currentTime int64, baseRetention int64) (bool, bool, bool) {
 	// when base retention passed, we also need to consider keep policies
 	rewriteKeepPolicy := false
 	rewriteDropPolicy := false
-	if isBlockRetentionPassed(b.maxT, currentTime, baseRetention) {
+	if isBlockRetentionPassed(b.MaxT, currentTime, baseRetention) {
 		if len(keepPolicies) == 0 {
 			return true, false, false
 		}
-		if !isKeepPoliciesSame(b.metaData.KeepPolicies, keepPolicies) {
+		if !isKeepPoliciesSame(b.MetaData.KeepPolicies, keepPolicies) {
 			rewriteKeepPolicy = true
 		}
 	}
@@ -83,7 +83,7 @@ func needsRewrite(dropPolicies []string, keepPolicies []string, b block, current
 	// always need to consider drop policies
 	for _, dp := range dropPolicies {
 		exist := false
-		for _, dph := range b.metaData.DropPolicies {
+		for _, dph := range b.MetaData.DropPolicies {
 			if dph == hashPolicy(dp) {
 				exist = true
 				break

@@ -11,9 +11,9 @@ var theCurrentTime = time.Now().Unix()
 var secondsInADay = int64(24 * time.Hour / time.Second)
 
 func TestGetRetentionPeriodRange(t *testing.T) {
-	policies := []perSeriesRetentionPolicy{
-		{retentionPeriod: 10, policy: "policy1"},
-		{retentionPeriod: 20, policy: "policy2"},
+	policies := []PerSeriesRetentionPolicy{
+		{RetentionPeriod: 10, Policy: "Policy1"},
+		{RetentionPeriod: 20, Policy: "Policy2"},
 	}
 	baseRetention := int64(5)
 
@@ -55,17 +55,17 @@ func TestIsBlockRetentionPassed(t *testing.T) {
 func TestBuildKeepPolicy(t *testing.T) {
 	testCases := []struct {
 		name          string
-		policies      []perSeriesRetentionPolicy
+		policies      []PerSeriesRetentionPolicy
 		baseRetention int64
 		currentTime   int64
 		maxT          int64
 		expected      []string
 	}{
 		{
-			name: "no keep policy returned when current time is less than base retention",
-			policies: []perSeriesRetentionPolicy{
-				{retentionPeriod: 8 * secondsInADay, policy: "policy1"},
-				{retentionPeriod: 20 * secondsInADay, policy: "policy2"},
+			name: "no keep Policy returned when current time is less than base retention",
+			policies: []PerSeriesRetentionPolicy{
+				{RetentionPeriod: 8 * secondsInADay, Policy: "Policy1"},
+				{RetentionPeriod: 20 * secondsInADay, Policy: "Policy2"},
 			},
 			baseRetention: 7 * secondsInADay,
 			currentTime:   theCurrentTime,
@@ -73,21 +73,21 @@ func TestBuildKeepPolicy(t *testing.T) {
 			expected:      []string{},
 		},
 		{
-			name: "only the keep policy that are not expired yet returned, when the base retention is passed",
-			policies: []perSeriesRetentionPolicy{
-				{retentionPeriod: 8 * secondsInADay, policy: "policy1"},
-				{retentionPeriod: 20 * secondsInADay, policy: "policy2"},
+			name: "only the keep Policy that are not expired yet returned, when the base retention is passed",
+			policies: []PerSeriesRetentionPolicy{
+				{RetentionPeriod: 8 * secondsInADay, Policy: "Policy1"},
+				{RetentionPeriod: 20 * secondsInADay, Policy: "Policy2"},
 			},
 			baseRetention: 7 * secondsInADay,
 			currentTime:   theCurrentTime,
 			maxT:          theCurrentTime - 10*secondsInADay,
-			expected:      []string{"policy2"},
+			expected:      []string{"Policy2"},
 		},
 		{
-			name: "no keep policy returned when all retention policies are expired",
-			policies: []perSeriesRetentionPolicy{
-				{retentionPeriod: 8 * secondsInADay, policy: "policy1"},
-				{retentionPeriod: 20 * secondsInADay, policy: "policy2"},
+			name: "no keep Policy returned when all retention policies are expired",
+			policies: []PerSeriesRetentionPolicy{
+				{RetentionPeriod: 8 * secondsInADay, Policy: "Policy1"},
+				{RetentionPeriod: 20 * secondsInADay, Policy: "Policy2"},
 			},
 			baseRetention: 7 * secondsInADay,
 			currentTime:   theCurrentTime,
@@ -107,17 +107,17 @@ func TestBuildKeepPolicy(t *testing.T) {
 func TestBuildDropPolicy(t *testing.T) {
 	testCases := []struct {
 		name          string
-		policies      []perSeriesRetentionPolicy
+		policies      []PerSeriesRetentionPolicy
 		baseRetention int64
 		currentTime   int64
 		maxT          int64
 		expected      []string
 	}{
 		{
-			name: "When no policy is expired, no drop policy returned",
-			policies: []perSeriesRetentionPolicy{
-				{retentionPeriod: 8 * secondsInADay, policy: "policy1"},
-				{retentionPeriod: 20 * secondsInADay, policy: "policy2"},
+			name: "When no Policy is expired, no drop Policy returned",
+			policies: []PerSeriesRetentionPolicy{
+				{RetentionPeriod: 8 * secondsInADay, Policy: "Policy1"},
+				{RetentionPeriod: 20 * secondsInADay, Policy: "Policy2"},
 			},
 			baseRetention: 10 * secondsInADay,
 			currentTime:   theCurrentTime,
@@ -125,26 +125,26 @@ func TestBuildDropPolicy(t *testing.T) {
 			expected:      []string{},
 		},
 		{
-			name: "When the policy is shorter than base retention expired, drop policy returned",
-			policies: []perSeriesRetentionPolicy{
-				{retentionPeriod: 8 * secondsInADay, policy: "policy1"},
-				{retentionPeriod: 20 * secondsInADay, policy: "policy2"},
+			name: "When the Policy is shorter than base retention expired, drop Policy returned",
+			policies: []PerSeriesRetentionPolicy{
+				{RetentionPeriod: 8 * secondsInADay, Policy: "Policy1"},
+				{RetentionPeriod: 20 * secondsInADay, Policy: "Policy2"},
 			},
 			baseRetention: 10 * secondsInADay,
 			currentTime:   theCurrentTime,
 			maxT:          theCurrentTime - 15*secondsInADay,
-			expected:      []string{"policy1"},
+			expected:      []string{"Policy1"},
 		},
 		{
 			name: "When all polcies expried, only policies shorter than base retention returned in drop policies list",
-			policies: []perSeriesRetentionPolicy{
-				{retentionPeriod: 8 * secondsInADay, policy: "policy1"},
-				{retentionPeriod: 20 * secondsInADay, policy: "policy2"},
+			policies: []PerSeriesRetentionPolicy{
+				{RetentionPeriod: 8 * secondsInADay, Policy: "Policy1"},
+				{RetentionPeriod: 20 * secondsInADay, Policy: "Policy2"},
 			},
 			baseRetention: 10 * secondsInADay,
 			currentTime:   theCurrentTime,
 			maxT:          theCurrentTime - 30*secondsInADay,
-			expected:      []string{"policy1"},
+			expected:      []string{"Policy1"},
 		},
 	}
 
@@ -172,7 +172,7 @@ func TestIsKeepPoliciesSame(t *testing.T) {
 		{
 			testName:          "Empty Keep Policy History and Non-empty Keep Policy",
 			keepPolicyHistory: []string{},
-			keepPolicy:        []string{"policy1", "policy2"},
+			keepPolicy:        []string{"Policy1", "Policy2"},
 			expected:          false,
 		},
 		{
@@ -183,14 +183,14 @@ func TestIsKeepPoliciesSame(t *testing.T) {
 		},
 		{
 			testName:          "Keep Policies Same",
-			keepPolicyHistory: []string{hashPolicy("policy1;policy2")},
-			keepPolicy:        []string{"policy1", "policy2"},
+			keepPolicyHistory: []string{hashPolicy("Policy1;Policy2")},
+			keepPolicy:        []string{"Policy1", "Policy2"},
 			expected:          true,
 		},
 		{
 			testName:          "Keep Policies Different",
-			keepPolicyHistory: []string{hashPolicy("policy1;policy2")},
-			keepPolicy:        []string{"policy1"},
+			keepPolicyHistory: []string{hashPolicy("Policy1;Policy2")},
+			keepPolicy:        []string{"Policy1"},
 			expected:          false,
 		},
 	}
@@ -229,7 +229,7 @@ func TestNeedsRewrite(t *testing.T) {
 			expectedRewriteDrop: false,
 		},
 		{
-			name:                "Default retention not passed, one new policy (shorter than default) expired, drop policies needs to be rewritten",
+			name:                "Default retention not passed, one new Policy (shorter than default) expired, drop policies needs to be rewritten",
 			dropPolicies:        []string{"dropPolicy1"},
 			keepPolicies:        []string{},
 			metaData:            MetaData{DropPolicies: []string{}, KeepPolicies: []string{}},
@@ -241,7 +241,7 @@ func TestNeedsRewrite(t *testing.T) {
 			expectedRewriteDrop: true,
 		},
 		{
-			name:                "Default retention not passed, one policy applied is modified (shorter than default), drop policies needs to be rewritten",
+			name:                "Default retention not passed, one Policy applied is modified (shorter than default), drop policies needs to be rewritten",
 			dropPolicies:        []string{"dropPolicy2"},
 			keepPolicies:        []string{},
 			metaData:            MetaData{DropPolicies: []string{hashPolicy("dropPolicy1")}, KeepPolicies: []string{}},
@@ -253,7 +253,7 @@ func TestNeedsRewrite(t *testing.T) {
 			expectedRewriteDrop: true,
 		},
 		{
-			name:                "Default retention passed, one new policy (longer than default) expired, keep policies needs to be rewritten",
+			name:                "Default retention passed, one new Policy (longer than default) expired, keep policies needs to be rewritten",
 			dropPolicies:        []string{"dropPolicy1"},
 			keepPolicies:        []string{"keepPolicy1"},
 			metaData:            MetaData{DropPolicies: []string{hashPolicy("dropPolicy1"), hashPolicy("dropPolicy2")}, KeepPolicies: []string{hashPolicy("keepPolicy1; keepPolicy2")}},
@@ -269,7 +269,7 @@ func TestNeedsRewrite(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Call the function with test input
-			toDelete, toRewriteKeep, toRewriteDrop := needsRewrite(tc.dropPolicies, tc.keepPolicies, block{maxT: tc.blockMaxT, metaData: tc.metaData}, tc.currentTime, tc.baseRetention)
+			toDelete, toRewriteKeep, toRewriteDrop := needsRewrite(tc.dropPolicies, tc.keepPolicies, Block{MaxT: tc.blockMaxT, MetaData: tc.metaData}, tc.currentTime, tc.baseRetention)
 
 			// Compare the result with expected output
 			assert.Equal(t, tc.expectedToDelete, toDelete)
